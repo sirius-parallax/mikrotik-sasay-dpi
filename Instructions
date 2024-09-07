@@ -1,0 +1,64 @@
+0. Создем тунель до вашей VDS или  VPN. WG или OpeVPN смотря что у вас работаеть будет. 
+1. Добавляем в тыблицу RAW правила бдоавбления ip адресов на основе поля "Content"
+/ip firewall raw
+add action=add-dst-to-address-list address-list=Youtube address-list-timeout=2h chain=prerouting content=\
+    googlevideo.com dst-address-list=!own-ip
+add action=add-dst-to-address-list address-list=Youtube address-list-timeout=2h chain=prerouting content=\
+    ytimg.com dst-address-list=!own-ip
+add action=add-dst-to-address-list address-list=Youtube address-list-timeout=2h chain=prerouting content=\
+    youtube.com dst-address-list=!own-ip
+add action=add-dst-to-address-list address-list=Youtube address-list-timeout=2h chain=prerouting content=\
+    ggpht.com dst-address-list=!own-ip
+add action=add-dst-to-address-list address-list=Instagram address-list-timeout=2h chain=prerouting content=\
+    instagram.com dst-address-list=!own-ip
+add action=add-dst-to-address-list address-list=Instagram address-list-timeout=2h chain=prerouting content=\
+    cdninstagram.com dst-address-list=!own-ip
+2. Добавляем в Address List "own-ip" свой белый IP а так же адрес тунеля. Эти адреса должны исключаться из работы правила в RAW
+3. Добавляем таблицу маршрутизации
+/routing table
+add disabled=no fib name=wg
+4. Добавляем в в Mangle маркировку трафика который направляется в address list 
+/ip firewall mangle
+add action=mark-routing chain=prerouting comment=YouTube dst-address-list=Youtube new-routing-mark=wg \
+    passthrough=yes
+add action=mark-routing chain=prerouting comment=Instagram dst-address-list=Instagram new-routing-mark=wg \
+    passthrough=yes
+5. Создаем маршрут по умолчанию для таблицы маршрутизации "wg"
+/ip route
+add disabled=no dst-address=0.0.0.0/0 gateway=wireguard1 routing-table=wg suppress-hw-offload=no
+===================================================================================================
+По желанию делаем DOH что бы провайдер неподменял нам наши DNS запросы.
+CloudFlare (1.1.1.1)
+/tool fetch url=https://cacerts.digicert.com/DigiCertGlobalRootCA.crt.pem
+/certificate import file-name=DigiCertGlobalRootCA.crt.pem passphrase=""
+/ip dns set use-doh-server=https://1.1.1.1/dns-query verify-doh-cert=yes
+/ip dns set servers=""
+
+или
+
+DNS.Google (8.8.8.8)
+/tool fetch url=https://curl.se/ca/cacert.pem
+/certificate import file-name=cacert.pem passphrase=""
+/ip dns static add address=8.8.8.8 name=dns.google
+/ip dns static add address=8.8.4.4 name=dns.google
+/ip dns set use-doh-server=https://dns.google/dns-query verify-doh-cert=yes
+===================================================================================================
+По желанию мониторим WG тунель если он "заглох" то отключаем mangle что бы дать возможность идти трафику апрямую.
+В планировщик можно замостерить вот такой скрипт с интевалом в 3 минуты (скрипт пингует ip адрес через WG интерфейс 
+если пингов нет то отключает mangle по вашему заранее сделанному комментарию. Ну и включает если пиги проходят ):
+
+:local testIp "8.8.8.8"
+:local wgInterface "wireguard1"
+
+:local pingResult [/ping $testIp interface=$wgInterface count=1]
+:local isConnected ($pingResult != 0)
+
+:if ($isConnected) do={
+    /ip firewall mangle enable [find comment="YouTube"]
+    /ip firewall mangle enable [find comment="Instagram"]
+} else={
+    /ip firewall mangle disable [find comment="YouTube"]
+    /ip firewall mangle disable [find comment="Instagram"]
+}
+
+
