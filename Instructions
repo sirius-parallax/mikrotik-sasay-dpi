@@ -26,6 +26,12 @@ add action=mark-routing chain=prerouting comment=Instagram dst-address-list=Inst
 5. Создаем маршрут по умолчанию для таблицы маршрутизации "wg"
 /ip route
 add disabled=no dst-address=0.0.0.0/0 gateway=wireguard1 routing-table=wg suppress-hw-offload=no
+6. Отключаем или делаем исключение для работы Fasttrack в микротик так как mangle не будут работать. 
+Либо выключить лиюо в исключение:
+
+add action=fasttrack-connection chain=forward comment="defconf: fasttrack" connection-state=\
+    established,related hw-offload=yes in-interface-list=!vpn out-interface-list=!vpn \
+    routing-mark=!youtube
 ===================================================================================================
 По желанию делаем DOH что бы провайдер неподменял нам наши DNS запросы.
 CloudFlare (1.1.1.1)
@@ -60,5 +66,6 @@ DNS.Google (8.8.8.8)
     /ip firewall mangle disable [find comment="YouTube"]
     /ip firewall mangle disable [find comment="Instagram"]
 }
+===================================================================================================
 
 
